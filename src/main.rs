@@ -1,37 +1,28 @@
-use cursive::{With, traits::Boxable, view::Margins, views::{Button, Dialog, DummyView, EditView, LinearLayout, ListView, PaddedView, Checkbox}};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use cursive::{Cursive, traits::{Boxable, Nameable}, view::Margins, views::{Button, TextView,Checkbox, Dialog, DummyView, EditView, LinearLayout, ListView, PaddedView}};
 
 fn main() {
-
-    let done = vec![String::from("Something")];
-    let todo = vec![String::from("Else")];
+    // let done = Rc::new(vec![String::from("Something")]);
+    // Rc::clone()
+    // let todo = RefCell::new(vec![String::from("Else")]);
 
     let mut siv = cursive::default();
 
-    let todo_view = Dialog::around(
-        ListView::new()
-            .with(
-                |c| {
-                    for item in done {
-                        c.add_child(item.as_str(), Checkbox::new())
-                    }
-                }
-            ))
+    let todo_view = Dialog::around(ListView::new().with_name("todo"))
         .title("ToDo")
         .min_height(10)
         .min_width(25);
 
-    let done_view = Dialog::around(
-        ListView::new()
-            .with(
-                |c| {
-                    for item in todo {
-                        c.add_child(item.as_str(), Checkbox::new().checked())
-                    }
-                }
-            ))
+    let done_view = Dialog::around(ListView::new().with_name("done"))
         .title("Done")
         .min_height(10)
         .min_width(25);
+
+    let edit_view = EditView::new()
+        .with_name("input")
+        .fixed_width(15);
 
     let add_view = PaddedView::new(
         Margins {
@@ -41,11 +32,7 @@ fn main() {
             bottom: 1,
         },
         LinearLayout::horizontal()
-            .child(
-                EditView::new()
-                    .on_submit(|s, text| s.quit())
-                    .fixed_width(15),
-            )
+            .child(edit_view)
             .child(DummyView)
             .child(Button::new("Add", |s| s.quit()))
             .max_width(25),
@@ -61,12 +48,24 @@ fn main() {
         )
         .padding(Margins::lrtb(1, 1, 1, 1))
         .button("Clear", |s| s.quit())
-        .button("Quit", |s| s.quit())
+        .button("Quit", show_popup)
         .title("ToDo App"),
     );
 
     siv.run();
 }
+
+fn show_popup(s: &mut Cursive) {
+    s.call_on_name("input", |view: &mut EditView| {
+        view.set_content("");
+    });
+}
+
+// Cursive layout -> Ok
+// Cursive actions -> need more research
+// checkbox -> on_change -> get listview current selected
+
+// Rc RefCell
 
 //     let to_dos = RefCell::new(ToDos::new());
 
