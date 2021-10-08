@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use cursive::{Cursive, traits::{Boxable, Nameable}, view::Margins, views::{Button, TextView,Checkbox, Dialog, DummyView, EditView, LinearLayout, ListView, PaddedView}};
+use cursive::{Cursive, traits::{Boxable, Nameable}, view::Margins, views::{Button, Checkbox, Dialog, DummyView, EditView, LinearLayout, ListChild, ListView, PaddedView}};
 
 fn main() {
     // let done = Rc::new(vec![String::from("Something")]);
@@ -21,6 +21,7 @@ fn main() {
         .min_width(25);
 
     let edit_view = EditView::new()
+        .on_submit(add_todo)
         .with_name("input")
         .fixed_width(15);
 
@@ -34,7 +35,12 @@ fn main() {
         LinearLayout::horizontal()
             .child(edit_view)
             .child(DummyView)
-            .child(Button::new("Add", |s| s.quit()))
+            .child(Button::new("Add", |s| {
+                let text = s
+                    .call_on_name("input", |c: &mut EditView| c.get_content())
+                    .unwrap();
+                add_todo(s, text.as_str());
+            }))
             .max_width(25),
     );
 
@@ -47,18 +53,76 @@ fn main() {
                 .min_width(50),
         )
         .padding(Margins::lrtb(1, 1, 1, 1))
-        .button("Clear", |s| s.quit())
-        .button("Quit", show_popup)
+        .button("Clear", |s| {
+            s.call_on_name("done", |c: &mut ListView| {
+                c.clear()
+            });
+        })
+        .button("Quit", |s| s.quit())
         .title("ToDo App"),
     );
 
     siv.run();
 }
 
-fn show_popup(s: &mut Cursive) {
+fn add_todo(s: &mut Cursive, text: &str) {
+    s.call_on_name("todo", |view: &mut ListView| {
+        view.add_child(text, Checkbox::new().on_change(toogle_todo))
+    });
     s.call_on_name("input", |view: &mut EditView| {
         view.set_content("");
     });
+}
+
+fn toogle_todo(s: &mut Cursive, checked: bool) {
+    let label = match checked {
+        true => get_label(s, "todo"),
+        false => get_label(s, "done"),
+    };
+
+    match label {
+        Some((label, index)) if checked => {
+            done_add_child(s, label.as_str());
+            todo_remove_child(s, index);
+        }
+        Some((label, index)) if !checked => {
+            todo_add_child(s, label.as_str());
+            done_remove_child(s, index);
+        }
+        Some(_) => (), 
+        None => (),
+    }
+}
+
+fn done_add_child(s: &mut Cursive, label: &str) {
+    s.call_on_name("done", |view: &mut ListView| {
+        view.add_child(label, Checkbox::new().on_change(toogle_todo).checked())
+    });
+}
+
+fn todo_add_child(s: &mut Cursive, label: &str) {
+    s.call_on_name("todo", |view: &mut ListView| {
+        view.add_child(label, Checkbox::new().on_change(toogle_todo))
+    });
+}
+
+fn done_remove_child(s: &mut Cursive, index: usize) {
+    s.call_on_name("done", |c: &mut ListView| c.remove_child(index));
+}
+
+fn todo_remove_child(s: &mut Cursive, index: usize) {
+    s.call_on_name("todo", |c: &mut ListView| c.remove_child(index));
+}
+
+fn get_label(s: &mut Cursive, name: &str) -> Option<(String, usize)> {
+    s.call_on_name(name, |c: &mut ListView| {
+        let index = c.focus();
+        let child = c.get_row(index);
+        match child {
+            ListChild::Row(label, _) => (label.clone(), index),
+            ListChild::Delimiter => todo!(),
+        }
+    })
 }
 
 // Cursive layout -> Ok
