@@ -1,29 +1,69 @@
-use std::cell::RefCell;
+use std::borrow::BorrowMut;
 use std::rc::Rc;
+use std::thread::AccessError;
+use std::{borrow::Borrow, cell::RefCell};
 
-use cursive::{Cursive, traits::{Boxable, Nameable}, view::Margins, views::{Button, Checkbox, Dialog, DummyView, EditView, LinearLayout, ListChild, ListView, PaddedView}};
+use cursive::backend::Backend;
+use cursive::{
+    traits::{Boxable, Nameable},
+    view::Margins,
+    views::{
+        Button, Checkbox, Dialog, DummyView, EditView, LinearLayout, ListChild, ListView,
+        PaddedView,
+    },
+    Cursive, With,
+};
+mod to_do_list;
+use to_do_list::ToDos;
 
 fn main() {
-    // let done = Rc::new(vec![String::from("Something")]);
-    // Rc::clone()
-    // let todo = RefCell::new(vec![String::from("Else")]);
+    let todos = RefCell::new(ToDos::new());
 
     let mut siv = cursive::default();
 
-    let todo_view = Dialog::around(ListView::new().with_name("todo"))
+    let todo_view = Dialog::around(ListView::new().with(|list| {
+        for (k, _) in todos.borrow().list.iter().filter(|v| !*v.1) {
+            list.add_child(k, Checkbox::new());
+        }
+    }).with_name("todo"))
         .title("ToDo")
         .min_height(10)
         .min_width(25);
 
-    let done_view = Dialog::around(ListView::new().with_name("done"))
+    let done_view = Dialog::around(ListView::new().with(|list| {
+        for (k, _) in todos.borrow().list.iter().filter(|v| *v.1) {
+            list.add_child(k, Checkbox::new().checked());
+        }
+    }).with_name("done"))
         .title("Done")
         .min_height(10)
         .min_width(25);
 
-    let edit_view = EditView::new()
-        .on_submit(add_todo)
-        .with_name("input")
-        .fixed_width(15);
+    let todo_manager = move |text: &str, action: Actions| {
+        match action {
+            Actions::Add => todos.borrow_mut().add(text),
+            Actions::Toggle => todo!(),
+            Actions::Clear => todo!(),
+        }
+    };
+
+    let refresh = move |s: &mut Cursive| {
+        s.call_on_name("todo", |list: &mut ListView| {
+            for (k, _) in todos.borrow().list.iter().filter(|v| !*v.1) {
+                list.add_child(k, Checkbox::new());
+            }
+        });
+        s.call_on_name("done", |list: &mut ListView| {
+            for (k, _) in todos.borrow().list.iter().filter(|v| *v.1) {
+                list.add_child(k, Checkbox::new().checked());
+            }
+        });
+    };
+
+    let edit_view = EditView::new().on_submit( move |s, text| {
+        todo_manager(text.clone(), Actions::Add);
+        refresh(s);
+    }).with_name("input").fixed_width(15);
 
     let add_view = PaddedView::new(
         Margins {
@@ -35,12 +75,12 @@ fn main() {
         LinearLayout::horizontal()
             .child(edit_view)
             .child(DummyView)
-            .child(Button::new("Add", |s| {
-                let text = s
-                    .call_on_name("input", |c: &mut EditView| c.get_content())
-                    .unwrap();
-                add_todo(s, text.as_str());
-            }))
+            // .child(Button::new("Add", |s| {
+            //     let text = s
+            //         .call_on_name("input", |c: &mut EditView| c.get_content())
+            //         .unwrap();
+            //     add_todo(s, text.as_str());
+            // }))
             .max_width(25),
     );
 
@@ -54,9 +94,7 @@ fn main() {
         )
         .padding(Margins::lrtb(1, 1, 1, 1))
         .button("Clear", |s| {
-            s.call_on_name("done", |c: &mut ListView| {
-                c.clear()
-            });
+            s.call_on_name("done", |c: &mut ListView| c.clear());
         })
         .button("Quit", |s| s.quit())
         .title("ToDo App"),
@@ -65,65 +103,58 @@ fn main() {
     siv.run();
 }
 
-fn add_todo(s: &mut Cursive, text: &str) {
-    s.call_on_name("todo", |view: &mut ListView| {
-        view.add_child(text, Checkbox::new().on_change(toogle_todo))
-    });
-    s.call_on_name("input", |view: &mut EditView| {
-        view.set_content("");
-    });
+enum Actions {
+    Add,
+    Toggle,
+    Clear,
 }
 
-fn toogle_todo(s: &mut Cursive, checked: bool) {
-    let label = match checked {
-        true => get_label(s, "todo"),
-        false => get_label(s, "done"),
-    };
+// fn add_todo(text: &str, todos: & mut ToDos) {
+//     todos.list.push(ToDo { name: text.to_string(), is_done: false});
+// }
 
-    match label {
-        Some((label, index)) if checked => {
-            done_add_child(s, label.as_str());
-            todo_remove_child(s, index);
-        }
-        Some((label, index)) if !checked => {
-            todo_add_child(s, label.as_str());
-            done_remove_child(s, index);
-        }
-        Some(_) => (), 
-        None => (),
-    }
-}
+// fn refresh<'a>(s: &mut Cursive, todos: &'a Rc<RefCell<ToDos>>) {
+//     s.call_on_name("done", |list: &mut ListView| {
+//         list.clear();
 
-fn done_add_child(s: &mut Cursive, label: &str) {
-    s.call_on_name("done", |view: &mut ListView| {
-        view.add_child(label, Checkbox::new().on_change(toogle_todo).checked())
-    });
-}
+//         let here: &RefCell<ToDos> = Rc::clone(&todos).borrow();
+//         for item in here.borrow().list.iter().filter(|v| v.is_done) {
+//             list.add_child(item.name.as_str(), Checkbox::new().on_change(|siv: &mut Cursive, checked:bool| {
+//                 toogle_todo(siv, checked);
+//             }));
+//         }
+//     });
 
-fn todo_add_child(s: &mut Cursive, label: &str) {
-    s.call_on_name("todo", |view: &mut ListView| {
-        view.add_child(label, Checkbox::new().on_change(toogle_todo))
-    });
-}
+//     s.call_on_name("todo", |list: &mut ListView| {
+//         list.clear();
+//         let here: &RefCell<ToDos> = Rc::clone(&todos).borrow();
+//         for item in here.borrow().list.iter().filter(|v| !v.is_done) {
+//             list.add_child(item.name.as_str(), Checkbox::new().on_change(|siv: &mut Cursive, checked:bool| {
+//                 toogle_todo(siv, checked);
+//             }));
+//         }
+//     });
+// }
 
-fn done_remove_child(s: &mut Cursive, index: usize) {
-    s.call_on_name("done", |c: &mut ListView| c.remove_child(index));
-}
+// fn toogle_todo<'a>(s: &mut Cursive, checked: bool) {
+//     let label = match checked {
+//         true => get_label(s, "todo").unwrap(),
+//         false => get_label(s, "done").unwrap(),
+//     };
 
-fn todo_remove_child(s: &mut Cursive, index: usize) {
-    s.call_on_name("todo", |c: &mut ListView| c.remove_child(index));
-}
+//     //todos.toggle(&label);
+// }
 
-fn get_label(s: &mut Cursive, name: &str) -> Option<(String, usize)> {
-    s.call_on_name(name, |c: &mut ListView| {
-        let index = c.focus();
-        let child = c.get_row(index);
-        match child {
-            ListChild::Row(label, _) => (label.clone(), index),
-            ListChild::Delimiter => todo!(),
-        }
-    })
-}
+// fn get_label(s: &mut Cursive, name: &str) -> Option<String> {
+//     s.call_on_name(name, |c: &mut ListView| {
+//         let index = c.focus();
+//         let child = c.get_row(index);
+//         match child {
+//             ListChild::Row(label, _) => label.clone(),
+//             ListChild::Delimiter => todo!(),
+//         }
+//     })
+// }
 
 // Cursive layout -> Ok
 // Cursive actions -> need more research

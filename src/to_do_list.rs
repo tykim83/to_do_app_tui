@@ -1,34 +1,35 @@
+use std::collections::HashMap;
+
 #[derive(Debug, Clone)]
 pub struct ToDos {
-    pub list: Vec<ToDo>,
+    pub list: HashMap<String, bool>,
 }
 
 impl ToDos {
     pub fn new() -> Self {
         Self {
-            list: vec![
-                ToDo {
-                    name: String::from("Dota"),
-                    is_done: true,
-                },
-                ToDo {
-                    name: String::from("Text Game V3"),
-                    is_done: false,
-                },
-            ],
+            list: [
+                ("Kill Spike".to_string(), false),
+                ("Denmark".to_string(), false),
+                ("Iceland".to_string(), true),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
         }
     }
 
-    pub fn add(&mut self, to_do: &str) {
-        self.list.push(ToDo {
-            name: to_do.to_string(),
-            is_done: false,
-        })
+    pub fn add(&mut self, todo: &str) {
+        self.list.insert(todo.to_string(), false);
+    }
+
+    pub fn toogle(&mut self, todo: &str) {
+        if let Some(v) = self.list.get_mut(todo) { *v = !*v }
+    }
+
+    pub fn clear(&mut self) {
+        self.list.retain(|_, v| !*v)
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ToDo {
-    pub name: String,
-    pub is_done: bool,
-}
+// you could run another thread and keep the gui separate from the data 
