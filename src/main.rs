@@ -1,14 +1,11 @@
-use std::borrow::BorrowMut;
 use std::rc::Rc;
-use std::thread::AccessError;
-use std::{borrow::Borrow, cell::RefCell};
+use std::cell::RefCell;
 
-use cursive::backend::Backend;
 use cursive::{
     traits::{Boxable, Nameable},
     view::Margins,
     views::{
-        Button, Checkbox, Dialog, DummyView, EditView, LinearLayout, ListChild, ListView,
+        Checkbox, Dialog, DummyView, EditView, LinearLayout, ListView,
         PaddedView,
     },
     Cursive, With,
@@ -16,13 +13,16 @@ use cursive::{
 mod to_do_list;
 use to_do_list::ToDos;
 
+
+
 fn main() {
-    let todos = RefCell::new(ToDos::new());
+    let todos = Rc::new(RefCell::new(ToDos::new()));
 
     let mut siv = cursive::default();
 
+    
     let todo_view = Dialog::around(ListView::new().with(|list| {
-        for (k, _) in todos.borrow().list.iter().filter(|v| !*v.1) {
+        for (k, _) in todos.as_ref().borrow().list.iter().filter(|v| !*v.1) {
             list.add_child(k, Checkbox::new());
         }
     }).with_name("todo"))
@@ -31,7 +31,7 @@ fn main() {
         .min_width(25);
 
     let done_view = Dialog::around(ListView::new().with(|list| {
-        for (k, _) in todos.borrow().list.iter().filter(|v| *v.1) {
+        for (k, _) in todos.as_ref().borrow().list.iter().filter(|v| *v.1) {
             list.add_child(k, Checkbox::new().checked());
         }
     }).with_name("done"))
@@ -39,29 +39,30 @@ fn main() {
         .min_height(10)
         .min_width(25);
 
-    let todo_manager = move |text: &str, action: Actions| {
+    let td = todos.clone();
+    let todo_manager = move |action: Actions| {
         match action {
-            Actions::Add => todos.borrow_mut().add(text),
-            Actions::Toggle => todo!(),
-            Actions::Clear => todo!(),
+            Actions::Add(text) => td.as_ref().borrow_mut().add(text),
+            Actions::_Toggle => todo!(),
+            Actions::_Clear => todo!(),
         }
     };
 
     let refresh = move |s: &mut Cursive| {
         s.call_on_name("todo", |list: &mut ListView| {
-            for (k, _) in todos.borrow().list.iter().filter(|v| !*v.1) {
+            for (k, _) in todos.as_ref().borrow().list.iter().filter(|v| !*v.1) {
                 list.add_child(k, Checkbox::new());
             }
         });
         s.call_on_name("done", |list: &mut ListView| {
-            for (k, _) in todos.borrow().list.iter().filter(|v| *v.1) {
+            for (k, _) in todos.as_ref().borrow().list.iter().filter(|v| *v.1) {
                 list.add_child(k, Checkbox::new().checked());
             }
         });
     };
 
     let edit_view = EditView::new().on_submit( move |s, text| {
-        todo_manager(text.clone(), Actions::Add);
+        todo_manager(Actions::Add(&text.to_owned()));
         refresh(s);
     }).with_name("input").fixed_width(15);
 
@@ -103,10 +104,10 @@ fn main() {
     siv.run();
 }
 
-enum Actions {
-    Add,
-    Toggle,
-    Clear,
+enum Actions<'a> {
+    Add(&'a str),
+    _Toggle,
+    _Clear,
 }
 
 // fn add_todo(text: &str, todos: & mut ToDos) {
