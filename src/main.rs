@@ -1,19 +1,17 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use cursive::{
     traits::{Boxable, Nameable},
     view::Margins,
-    views::{Button, Checkbox, Dialog, DummyView, EditView, LinearLayout, ListView, PaddedView},
+    views::{
+        Button, Checkbox, Dialog, DummyView, EditView, LinearLayout, ListView, PaddedView, ViewRef,
+    },
     Cursive,
 };
 mod to_do_list;
 use to_do_list::ToDos;
 
 fn main() {
-    let todos = Rc::new(RefCell::new(ToDos::new()));
-
     let mut siv = cursive::default();
+    siv.set_user_data(ToDos::new());
 
     let todo_view = Dialog::around(ListView::new().with_name("todo"))
         .title("ToDo")
@@ -25,15 +23,10 @@ fn main() {
         .min_height(10)
         .min_width(25);
 
-    let todo_add_button = todos.clone();
-    let todo_clear_button = todos.clone();
-    let todo_edit_view = todos.clone();
-    let todo_first_refresh = todos;
-
     let edit_view = EditView::new()
         .on_submit(move |s, text| {
-            todo_manager(Actions::Add(&text.to_owned()), todo_edit_view.clone());
-            refresh(s, todo_edit_view.clone());
+            todo_manager(s, Actions::Add(&text.to_owned()));
+            refresh_user_data(s);
             clear_edit_view(s);
         })
         .with_name("input")
@@ -53,8 +46,8 @@ fn main() {
                 let text = s
                     .call_on_name("input", |c: &mut EditView| c.get_content())
                     .unwrap();
-                todo_manager(Actions::Add(&text), todo_add_button.clone());
-                refresh(s, todo_add_button.clone());
+                todo_manager(s, Actions::Add(&text));
+                refresh_user_data(s);
                 clear_edit_view(s);
             }))
             .max_width(25),
@@ -70,15 +63,39 @@ fn main() {
         )
         .padding(Margins::lrtb(1, 1, 1, 1))
         .button("Clear", move |s| {
-            todo_manager(Actions::Clear, todo_clear_button.clone());
-            refresh(s, todo_clear_button.clone());
+            todo_manager(s, Actions::Clear);
+            refresh_user_data(s);
         })
         .button("Quit", |s| s.quit())
         .title("ToDo App"),
     );
 
-    refresh(&mut siv, todo_first_refresh);
+    refresh_user_data(&mut siv);
     siv.run();
+}
+
+fn refresh_user_data(s: &mut Cursive) {
+    for (name, status) in [("todo", false), ("done", true)] {
+        let mut view: ViewRef<ListView> = s.find_name(name).unwrap();
+        view.clear();
+        s.with_user_data(|todos: &mut ToDos| {
+            todos
+                .list
+                .iter()
+                .filter(|v| *v.1 == status)
+                .for_each(|(k, _)| {
+                    let mut checkbox = Checkbox::new().on_change(move |s, _| {
+                        let text = toogle(s, !status).unwrap();
+                        todo_manager(s, Actions::Toggle(&text));
+                        refresh_user_data(s);
+                    });
+                    if status {
+                        checkbox.set_checked(status);
+                    }
+                    view.add_child(k, checkbox);
+                });
+        });
+    }
 }
 
 enum Actions<'a> {
@@ -111,36 +128,16 @@ fn toogle(s: &mut Cursive, checked: bool) -> Option<String> {
     }
 }
 
-fn todo_manager(action: Actions, td: Rc<RefCell<ToDos>>) {
-    let td = td.as_ref();
+fn todo_manager(s: &mut Cursive, action: Actions) {
     match action {
-        Actions::Add(text) => td.borrow_mut().add(text),
-        Actions::Toggle(text) => td.borrow_mut().toogle(text),
-        Actions::Clear => td.borrow_mut().clear(),
-    }
-}
-
-fn refresh(s: &mut Cursive, td: Rc<RefCell<ToDos>>) {
-    for (name, status) in [("todo", false), ("done", true)] {
-        s.call_on_name(name, |list: &mut ListView| {
-            list.clear();
-            for (k, _) in td.as_ref().borrow().list.iter().filter(|v| *v.1 == status) {
-                let td = td.clone();
-                let mut checkbox = Checkbox::new().on_change(move |s, checked| {
-                    let text = toogle(s, checked).unwrap();
-                    todo_manager(Actions::Toggle(&text), td.clone());
-                    refresh(s, td.clone());
-                });
-                if status {
-                    checkbox.set_checked(status);
-                }
-                list.add_child(
-                    k,
-                    checkbox
-                );
-            }
-        });
-    }
+        Actions::Add(text) => s.user_data().map(|c: &mut ToDos| {
+            c.add(text);
+        }),
+        Actions::Toggle(text) => s.user_data().map(|c: &mut ToDos| {
+            c.toogle(text);
+        }),
+        Actions::Clear => s.user_data().map(ToDos::clear),
+    };
 }
 
 fn clear_edit_view(s: &mut Cursive) {

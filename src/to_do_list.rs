@@ -9,7 +9,7 @@ impl ToDos {
     pub fn new() -> Self {
         Self {
             list: [
-                ("Kill Spike".to_string(), false),
+                ("Italy".to_string(), false),
                 ("Denmark".to_string(), false),
                 ("Iceland".to_string(), true),
             ]
