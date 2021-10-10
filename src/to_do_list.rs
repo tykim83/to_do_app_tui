@@ -24,7 +24,9 @@ impl ToDos {
     }
 
     pub fn toogle(&mut self, todo: &str) {
-        if let Some(v) = self.list.get_mut(todo) { *v = !*v }
+        if let Some(v) = self.list.get_mut(todo) {
+            *v = !*v
+        }
     }
 
     pub fn clear(&mut self) {
@@ -32,4 +34,4 @@ impl ToDos {
     }
 }
 
-// you could run another thread and keep the gui separate from the data 
+// you could run another thread and keep the gui separate from the data
